@@ -22,10 +22,15 @@ jobs:
 
       - name: Build DEX
         run: |
+          chmod +x gradlew
           set +e
           ./gradlew --no-daemon :app:packageDex 2>&1 | tee /tmp/build.log
           status=${PIPESTATUS[0]}
-          cp /tmp/build.log outputs/build.log
+          if [ $status -ne 0 ]; then
+            cp /tmp/build.log outputs/build.log
+          elif [ -f outputs/build.log ]; then
+            rm -f outputs/build.log
+          fi
           exit $status
 
       - name: Generate actual.json
