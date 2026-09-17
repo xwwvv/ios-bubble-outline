@@ -59,7 +59,7 @@ class IosBubbleOutlinePlugin(BasePlugin):
     def _dex_cache_path(self):
         ctx = ApplicationLoader.applicationContext
         d = ctx.getDir(DEX_DIR, 0)
-        return os.path.join(d.getAbsolutePath(), "bubble-outline.dex")
+        return os.path.join(d.getAbsolutePath(), "bubble-outline-v2.dex")
 
     def _fetch_dex(self):
         cache = self._dex_cache_path()
