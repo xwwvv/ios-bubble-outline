@@ -5,11 +5,17 @@ from ui.settings import Header, Input, Switch
 import threading
 import os
 
+try:
+    from android.util import Log
+    Log.d("tmessages", "[ios_bubble_outline] module import v1.0.3")
+except Exception:
+    pass
+
 __id__ = "ios_bubble_outline"
 __name__ = "iOS Bubble Outline"
 __description__ = "Обводка пузырей в стиле iOS (DEX-версия)"
 __author__ = "@xw_wvv"
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 __icon__ = "exteraPlugins/1"
 __app_version__ = ">=12.9.0"
 __sdk_version__ = ">=1.4.4.3"
@@ -43,6 +49,7 @@ class IosBubbleOutlinePlugin(BasePlugin):
         except Exception:
             pass
         try:
+            from org.telegram.messenger import ApplicationLoader
             pkg = ApplicationLoader.applicationContext.getPackageName()
             path = "/storage/emulated/0/Android/media/" + str(pkg) + "/ios_bubble_outline_debug.log"
             with open(path, "a") as fh:
@@ -55,7 +62,7 @@ class IosBubbleOutlinePlugin(BasePlugin):
             self.outline_class = None
             self.hooked = False
             self._diag_done = False
-            self._log("on_plugin_load started v1.0.2")
+            self._log("on_plugin_load started v1.0.3")
             data = self._fetch_dex()
             if data is None:
                 self._log("Failed to fetch DEX")
