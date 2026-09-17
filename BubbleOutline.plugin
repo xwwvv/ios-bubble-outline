@@ -4,24 +4,15 @@ from ui.settings import Header, Input, Switch
 
 import threading
 import os
-import requests
-
-from android.util import Log
-
-from dalvik.system import InMemoryDexClassLoader, DexClassLoader
-from java.nio import ByteBuffer
-from org.telegram.messenger import ApplicationLoader
 
 __id__ = "ios_bubble_outline"
 __name__ = "iOS Bubble Outline"
 __description__ = "Обводка пузырей в стиле iOS (DEX-версия)"
 __author__ = "@xw_wvv"
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 __icon__ = "exteraPlugins/1"
 __app_version__ = ">=12.9.0"
 __sdk_version__ = ">=1.4.4.3"
-
-LOG_TAG = "ios_bubble_outline"
 
 GITHUB_USER = "xwwvv"
 GITHUB_REPO = "ios-bubble-outline"
@@ -41,12 +32,21 @@ DEFAULT_FORCE = False
 class IosBubbleOutlinePlugin(BasePlugin):
 
     def _log(self, message):
+        line = "[ios_bubble_outline] " + message
         try:
-            self.log(message)
+            self.log(line)
         except Exception:
             pass
         try:
-            Log.i(LOG_TAG, message)
+            from android.util import Log
+            Log.d("tmessages", line)
+        except Exception:
+            pass
+        try:
+            pkg = ApplicationLoader.applicationContext.getPackageName()
+            path = "/storage/emulated/0/Android/media/" + str(pkg) + "/ios_bubble_outline_debug.log"
+            with open(path, "a") as fh:
+                fh.write(line + "\n")
         except Exception:
             pass
 
@@ -55,7 +55,7 @@ class IosBubbleOutlinePlugin(BasePlugin):
             self.outline_class = None
             self.hooked = False
             self._diag_done = False
-            self._log("on_plugin_load started")
+            self._log("on_plugin_load started v1.0.2")
             data = self._fetch_dex()
             if data is None:
                 self._log("Failed to fetch DEX")
@@ -72,12 +72,17 @@ class IosBubbleOutlinePlugin(BasePlugin):
         except Exception as e:
             self._log("Unexpected error: %s" % e)
 
-    def _dex_cache_path(self):
+    def _dex_cache_dir(self):
+        from org.telegram.messenger import ApplicationLoader
         ctx = ApplicationLoader.applicationContext
         d = ctx.getDir(DEX_DIR, 0)
-        return os.path.join(d.getAbsolutePath(), "bubble-outline-v2.dex")
+        return d.getAbsolutePath()
+
+    def _dex_cache_path(self):
+        return os.path.join(self._dex_cache_dir(), "bubble-outline-v2.dex")
 
     def _fetch_dex(self):
+        import requests
         cache = self._dex_cache_path()
         try:
             if os.path.exists(cache):
@@ -101,6 +106,9 @@ class IosBubbleOutlinePlugin(BasePlugin):
         return None
 
     def _load_dex(self, data):
+        from org.telegram.messenger import ApplicationLoader
+        from dalvik.system import InMemoryDexClassLoader, DexClassLoader
+        from java.nio import ByteBuffer
         ctx = ApplicationLoader.applicationContext
         cache = self._dex_cache_path()
         try:
