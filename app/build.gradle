@@ -1,0 +1,101 @@
+import org.gradle.internal.os.OperatingSystem
+
+plugins {
+    id "com.android.library"
+    id "org.jetbrains.kotlin.android"
+}
+
+android {
+    namespace "com.myplugin.outline"
+    compileSdk 34
+
+    defaultConfig {
+        minSdk 21
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+    kotlinOptions {
+        jvmTarget = "11"
+    }
+}
+
+dependencies {
+    def stubJar = file("libs/telegram-stubs.jar")
+    if (stubJar.exists()) {
+        compileOnly files(stubJar.absolutePath)
+    }
+}
+
+def isWindows = OperatingSystem.current().isWindows()
+
+def findLatestBuildTools(File buildToolsDir) {
+    File latest = null
+    buildToolsDir.eachDir { dir ->
+        if (latest == null || dir.name > latest.name) {
+            latest = dir
+        }
+    }
+    return latest
+}
+
+afterEvaluate {
+    tasks.register("packageDex") {
+        def kotlinTask = tasks.findByName("compileReleaseKotlin")
+        def javacTask = tasks.findByName("compileReleaseJavaWithJavac")
+        if (kotlinTask != null) {
+            dependsOn(kotlinTask)
+        }
+        if (javacTask != null) {
+            dependsOn(javacTask)
+        }
+
+        def dexDir = new File(rootDir, "outputs")
+        def classDirs = files(
+                "${buildDir}/tmp/kotlin-classes/release",
+                "${buildDir}/intermediates/javac/release/classes",
+                "${buildDir}/intermediates/classes/release"
+        ).filter { it.exists() }
+
+        doLast {
+            dexDir.mkdirs()
+            new File(dexDir, "bubble-outline.dex").delete()
+
+            def sdkDir = android.sdkDirectory
+            def buildTools = new File(sdkDir, "build-tools")
+            def latestTools = findLatestBuildTools(buildTools)
+            if (latestTools == null) {
+                throw new GradleException("build-tools not found in ${buildTools.path}")
+            }
+            def d8 = new File(latestTools, isWindows ? "d8.bat" : "d8")
+            if (!d8.exists()) {
+                throw new GradleException("d8 not found in ${latestTools.path}")
+            }
+
+            def args = ["--output", dexDir.absolutePath, "--min-api", "21"]
+            android.bootClasspath.each { args << "--lib" << it.absolutePath }
+            classDirs.each { args << it.absolutePath }
+
+            if (isWindows) {
+                exec {
+                    executable "cmd"
+                    args "/c", d8.absolutePath, *args
+                }
+            } else {
+                exec {
+                    executable d8.absolutePath
+                    args args
+                }
+            }
+
+            def classesDex = new File(dexDir, "classes.dex")
+            if (classesDex.exists()) {
+                if (!classesDex.renameTo(new File(dexDir, "bubble-outline.dex"))) {
+                    throw new GradleException("could not rename classes.dex to bubble-outline.dex")
+                }
+            }
+        }
+    }
+}

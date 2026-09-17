@@ -1,0 +1,136 @@
+from base_plugin import BasePlugin, MethodHook
+from hook_utils import find_class
+from ui.settings import Header, Input, Toggle
+
+import threading
+
+__id__ = "ios_bubble_outline"
+__name__ = "iOS Bubble Outline"
+__description__ = "Обводка пузырей в стиле iOS (DEX-версия)"
+__author__ = "your_name"
+__version__ = "1.0.0"
+__icon__ = "exteraPlugins/1"
+__app_version__ = ">=12.9.0"
+__sdk_version__ = ">=1.4.4.3"
+
+GITHUB_USER = "your_github_username"
+GITHUB_REPO = "ios-bubble-outline"
+
+DEFAULT_COLOR = "#000000"
+DEFAULT_WIDTH = "1.5"
+DEFAULT_OPACITY = "80"
+DEFAULT_FORCE = False
+
+
+class IosBubbleOutlinePlugin(BasePlugin):
+
+    def on_plugin_load(self):
+        self.outline_class = None
+        self.hooked = False
+        self.loader = self.load_dex(
+            github_user=GITHUB_USER,
+            github_repo=GITHUB_REPO,
+            dex_file="bubble-outline.dex",
+        )
+        if not self.loader:
+            self.log("Failed to load DEX")
+            return
+        try:
+            self.outline_class = self.loader.load_class("com.myplugin.outline.Main")
+            self._try_hook()
+            if self.hooked:
+                self._call_start()
+            else:
+                threading.Thread(target=self._retry_hook, daemon=True).start()
+        except Exception as e:
+            self.log("Unexpected error: %s" % e)
+
+    def _try_hook(self):
+        try:
+            cell_class = find_class("org.telegram.ui.Cells.ChatMessageCell")
+            canvas_class = find_class("android.graphics.Canvas")
+            method = cell_class.getDeclaredMethod("drawBackground", canvas_class)
+            method.setAccessible(True)
+            self.hook_method(method, OutlineHook(self))
+            self.hooked = True
+            self.log("Hook registered")
+        except Exception as e:
+            self.log("Hook retry pending: %s" % e)
+
+    def _retry_hook(self):
+        import time
+        for _ in range(30):
+            if self.hooked:
+                return
+            time.sleep(1)
+            try:
+                self._try_hook()
+            except Exception:
+                pass
+
+    def _call_start(self):
+        try:
+            method = self.outline_class.getDeclaredMethod("start")
+            method.invoke(None)
+        except Exception:
+            pass
+
+    def create_settings(self):
+        return [
+            Header(text="Bubble Outline"),
+            Input(
+                key="outline_color",
+                text="Цвет обводки (HEX)",
+                default=DEFAULT_COLOR,
+                subtext="#RRGGBB",
+                icon="msg_edit",
+            ),
+            Input(
+                key="outline_width",
+                text="Толщина (dp)",
+                default=DEFAULT_WIDTH,
+                icon="msg_edit",
+            ),
+            Input(
+                key="outline_opacity",
+                text="Непрозрачность (0-100)",
+                default=DEFAULT_OPACITY,
+                icon="msg_edit",
+            ),
+            Toggle(
+                key="force_everywhere",
+                text="Форсировать везде",
+                default=DEFAULT_FORCE,
+                icon="msg_settings",
+            ),
+        ]
+
+    def draw_outline(self, cell, canvas):
+        if self.outline_class is None:
+            return
+        try:
+            color = str(self.get_setting("outline_color", DEFAULT_COLOR))
+            width = float(self.get_setting("outline_width", DEFAULT_WIDTH))
+            opacity = int(self.get_setting("outline_opacity", DEFAULT_OPACITY))
+            force = bool(self.get_setting("force_everywhere", DEFAULT_FORCE))
+            method = self.outline_class.getDeclaredMethod(
+                "drawOutline",
+                find_class("java.lang.Object"),
+                find_class("android.graphics.Canvas"),
+                find_class("java.lang.String"),
+                find_class("java.lang.Float"),
+                find_class("java.lang.Integer"),
+                find_class("java.lang.Boolean"),
+            )
+            method.invoke(None, cell, canvas, color, width, opacity, force)
+        except Exception:
+            pass
+
+
+class OutlineHook(MethodHook):
+
+    def __init__(self, plugin):
+        self.plugin = plugin
+
+    def after_hooked_method(self, param):
+        self.plugin.draw_outline(param.thisObject, param.args[0])
