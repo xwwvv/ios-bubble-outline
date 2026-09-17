@@ -1,19 +1,19 @@
 from base_plugin import BasePlugin, MethodHook
 from hook_utils import find_class
-from ui.settings import Header, Input, Toggle
+from ui.settings import Header, Input, Switch
 
 import threading
 
 __id__ = "ios_bubble_outline"
 __name__ = "iOS Bubble Outline"
 __description__ = "Обводка пузырей в стиле iOS (DEX-версия)"
-__author__ = "your_name"
+__author__ = "@xw_wvv"
 __version__ = "1.0.0"
 __icon__ = "exteraPlugins/1"
 __app_version__ = ">=12.9.0"
 __sdk_version__ = ">=1.4.4.3"
 
-GITHUB_USER = "your_github_username"
+GITHUB_USER = "xwwvv"
 GITHUB_REPO = "ios-bubble-outline"
 
 DEFAULT_COLOR = "#000000"
@@ -97,7 +97,7 @@ class IosBubbleOutlinePlugin(BasePlugin):
                 default=DEFAULT_OPACITY,
                 icon="msg_edit",
             ),
-            Toggle(
+            Switch(
                 key="force_everywhere",
                 text="Форсировать везде",
                 default=DEFAULT_FORCE,
