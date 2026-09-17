@@ -42,7 +42,16 @@ def findLatestBuildTools(File buildToolsDir) {
 }
 
 afterEvaluate {
+    def kotlinTask = tasks.findByName("compileReleaseKotlin")
+    def javacTask = tasks.findByName("compileReleaseJavaWithJavac")
+
     tasks.register("classesJar", Jar) {
+        if (kotlinTask != null) {
+            dependsOn(kotlinTask)
+        }
+        if (javacTask != null) {
+            dependsOn(javacTask)
+        }
         archiveFileName = "classes.jar"
         destinationDirectory = file("${buildDir}/intermediates")
         from("${buildDir}/tmp/kotlin-classes/release")
@@ -77,19 +86,19 @@ afterEvaluate {
                 throw new GradleException("classes.jar missing: ${classesJar.path}")
             }
 
-            def args = ["--output", dexDir.absolutePath, "--min-api", "21"]
-            android.bootClasspath.each { args << "--lib" << it.absolutePath }
-            args << classesJar.absolutePath
+            def d8Args = ["--output", dexDir.absolutePath, "--min-api", "21"]
+            android.bootClasspath.each { d8Args << "--lib" << it.absolutePath }
+            d8Args << classesJar.absolutePath
 
             if (isWindows) {
-                exec {
+                project.exec {
                     executable "cmd"
-                    args "/c", d8.absolutePath, *args
+                    args "/c", d8.absolutePath, *d8Args
                 }
             } else {
-                exec {
+                project.exec {
                     executable d8.absolutePath
-                    args args
+                    args d8Args
                 }
             }
 
