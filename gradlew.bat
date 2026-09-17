@@ -11,12 +11,6 @@ if exist "%WRAPPER_JAR%" (
     exit /b %errorlevel%
 )
 
-where gradle >nul 2>nul
-if %errorlevel%==0 (
-    gradle %*
-    exit /b %errorlevel%
-)
-
 if not exist "%DIST_DIR%\gradle-%GRADLE_VERSION%\bin\gradle.bat" (
     if not exist "%DIST_DIR%" mkdir "%DIST_DIR%"
     powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri 'https://services.gradle.org/distributions/gradle-%GRADLE_VERSION%-bin.zip' -OutFile '%DIST_DIR%\gradle-%GRADLE_VERSION%-bin.zip'"

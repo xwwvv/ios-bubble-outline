@@ -13,10 +13,6 @@ if [ -f "$WRAPPER_JAR" ]; then
     exec java -classpath "$WRAPPER_JAR" org.gradle.wrapper.GradleWrapperMain "$@"
 fi
 
-if command -v gradle >/dev/null 2>&1; then
-    exec gradle "$@"
-fi
-
 if [ ! -f "$GRADLE_BIN" ]; then
     mkdir -p "$DIST_DIR"
     if command -v curl >/dev/null 2>&1; then

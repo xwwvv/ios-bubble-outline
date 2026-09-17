@@ -61,14 +61,16 @@ afterEvaluate {
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     }
 
-    tasks.register("packageDex") {
+    tasks.register("runD8", Exec) {
         dependsOn "classesJar"
 
-        doLast {
-            def dexDir = new File(rootDir, "outputs")
+        def dexDir = new File(rootDir, "outputs")
+        def classesJar = new File(buildDir, "intermediates/classes.jar")
+
+        doFirst {
             dexDir.mkdirs()
-            new File(dexDir, "bubble-outline.dex").delete()
             new File(dexDir, "classes.dex").delete()
+            new File(dexDir, "bubble-outline.dex").delete()
 
             def sdkDir = android.sdkDirectory
             def buildTools = new File(sdkDir, "build-tools")
@@ -81,7 +83,6 @@ afterEvaluate {
                 throw new GradleException("d8 not found in ${latestTools.path}")
             }
 
-            def classesJar = new File(buildDir, "intermediates/classes.jar")
             if (!classesJar.exists()) {
                 throw new GradleException("classes.jar missing: ${classesJar.path}")
             }
@@ -91,17 +92,13 @@ afterEvaluate {
             d8Args << classesJar.absolutePath
 
             if (isWindows) {
-                project.exec {
-                    executable "cmd"
-                    args "/c", d8.absolutePath, *d8Args
-                }
+                commandLine "cmd", "/c", d8.absolutePath, *d8Args
             } else {
-                project.exec {
-                    executable d8.absolutePath
-                    args d8Args
-                }
+                commandLine d8.absolutePath, *d8Args
             }
+        }
 
+        doLast {
             def classesDex = new File(dexDir, "classes.dex")
             if (classesDex.exists()) {
                 if (!classesDex.renameTo(new File(dexDir, "bubble-outline.dex"))) {
@@ -109,5 +106,9 @@ afterEvaluate {
                 }
             }
         }
+    }
+
+    tasks.register("packageDex") {
+        dependsOn "runD8"
     }
 }
