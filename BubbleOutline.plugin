@@ -6,6 +6,8 @@ import threading
 import os
 import requests
 
+from android.util import Log
+
 from dalvik.system import InMemoryDexClassLoader, DexClassLoader
 from java.nio import ByteBuffer
 from org.telegram.messenger import ApplicationLoader
@@ -14,10 +16,12 @@ __id__ = "ios_bubble_outline"
 __name__ = "iOS Bubble Outline"
 __description__ = "Обводка пузырей в стиле iOS (DEX-версия)"
 __author__ = "@xw_wvv"
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 __icon__ = "exteraPlugins/1"
 __app_version__ = ">=12.9.0"
 __sdk_version__ = ">=1.4.4.3"
+
+LOG_TAG = "ios_bubble_outline"
 
 GITHUB_USER = "xwwvv"
 GITHUB_REPO = "ios-bubble-outline"
@@ -36,17 +40,29 @@ DEFAULT_FORCE = False
 
 class IosBubbleOutlinePlugin(BasePlugin):
 
+    def _log(self, message):
+        try:
+            self.log(message)
+        except Exception:
+            pass
+        try:
+            Log.i(LOG_TAG, message)
+        except Exception:
+            pass
+
     def on_plugin_load(self):
         try:
             self.outline_class = None
             self.hooked = False
+            self._diag_done = False
+            self._log("on_plugin_load started")
             data = self._fetch_dex()
             if data is None:
-                self.log("Failed to fetch DEX")
+                self._log("Failed to fetch DEX")
                 return
             clazz = self._load_dex(data)
             if clazz is None:
-                self.log("Failed to load DEX class")
+                self._log("Failed to load DEX class")
                 return
             self.outline_class = clazz
             self._call_start()
@@ -54,7 +70,7 @@ class IosBubbleOutlinePlugin(BasePlugin):
             if not self.hooked:
                 threading.Thread(target=self._retry_hook, daemon=True).start()
         except Exception as e:
-            self.log("Unexpected error: %s" % e)
+            self._log("Unexpected error: %s" % e)
 
     def _dex_cache_path(self):
         ctx = ApplicationLoader.applicationContext
@@ -66,19 +82,22 @@ class IosBubbleOutlinePlugin(BasePlugin):
         try:
             if os.path.exists(cache):
                 with open(cache, "rb") as fh:
-                    return fh.read()
+                    data = fh.read()
+                if data:
+                    self._log("Using cached DEX (%d bytes)" % len(data))
+                    return data
         except Exception as e:
-            self.log("Cache read failed: %s" % e)
+            self._log("Cache read failed: %s" % e)
         try:
             resp = requests.get(DEX_URL, timeout=30)
             resp.raise_for_status()
             data = resp.content
             with open(cache, "wb") as fh:
                 fh.write(data)
-            self.log("DEX downloaded (%d bytes)" % len(data))
+            self._log("DEX downloaded (%d bytes)" % len(data))
             return data
         except Exception as e:
-            self.log("DEX download failed: %s" % e)
+            self._log("DEX download failed: %s" % e)
         return None
 
     def _load_dex(self, data):
@@ -87,23 +106,28 @@ class IosBubbleOutlinePlugin(BasePlugin):
         try:
             buffer = ByteBuffer.wrap(data)
             loader = InMemoryDexClassLoader(buffer, ctx.getClassLoader())
-            return loader.loadClass(DEX_CLASS)
+            clazz = loader.loadClass(DEX_CLASS)
+            self._log("DEX class loaded (in-memory)")
+            return clazz
         except Exception as e:
-            self.log("InMemory load failed: %s" % e)
+            self._log("InMemory load failed: %s" % e)
         try:
             opt_dir = ctx.getDir(DEX_OPT_DIR, 0).getAbsolutePath()
             loader = DexClassLoader(cache, opt_dir, None, ctx.getClassLoader())
-            return loader.loadClass(DEX_CLASS)
+            clazz = loader.loadClass(DEX_CLASS)
+            self._log("DEX class loaded (from file)")
+            return clazz
         except Exception as e:
-            self.log("File load failed: %s" % e)
+            self._log("File load failed: %s" % e)
         return None
 
     def _call_start(self):
         try:
             method = self.outline_class.getMethod("start")
             method.invoke(None)
+            self._log("start() called")
         except Exception as e:
-            self.log("start() failed: %s" % e)
+            self._log("start() failed: %s" % e)
 
     def _try_hook(self):
         try:
@@ -113,9 +137,9 @@ class IosBubbleOutlinePlugin(BasePlugin):
             method.setAccessible(True)
             self.hook_method(method, OutlineHook(self), 2147483647)
             self.hooked = True
-            self.log("Hook registered")
+            self._log("Hook registered")
         except Exception as e:
-            self.log("Hook retry pending: %s" % e)
+            self._log("Hook retry pending: %s" % e)
 
     def _retry_hook(self):
         import time
@@ -176,8 +200,10 @@ class IosBubbleOutlinePlugin(BasePlugin):
                 find_class("java.lang.Boolean"),
             )
             method.invoke(None, cell, canvas, color, width, opacity, force)
-        except Exception:
-            pass
+        except Exception as e:
+            if not self._diag_done:
+                self._diag_done = True
+                self._log("drawOutline error: %s" % e)
 
 
 class OutlineHook(MethodHook):
