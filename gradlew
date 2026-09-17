@@ -27,7 +27,14 @@ if [ ! -f "$GRADLE_BIN" ]; then
         echo "gradle not found and the distribution could not be downloaded" >&2
         exit 1
     fi
-    unzip -q "$DIST_ZIP" -d "$DIST_DIR"
+    if command -v unzip >/dev/null 2>&1; then
+        unzip -q "$DIST_ZIP" -d "$DIST_DIR"
+    elif command -v python3 >/dev/null 2>&1; then
+        python3 -m zipfile -e "$DIST_ZIP" "$DIST_DIR"
+    else
+        echo "unzip or python3 is required to extract gradle" >&2
+        exit 1
+    fi
 fi
 
 exec "$GRADLE_BIN" "$@"
