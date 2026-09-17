@@ -109,7 +109,7 @@ class IosBubbleOutlinePlugin(BasePlugin):
         try:
             cell_class = find_class("org.telegram.ui.Cells.ChatMessageCell")
             canvas_class = find_class("android.graphics.Canvas")
-            method = cell_class.getDeclaredMethod("drawBackground", canvas_class)
+            method = cell_class.getDeclaredMethod("onDraw", canvas_class)
             method.setAccessible(True)
             self.hook_method(method, OutlineHook(self), 2147483647)
             self.hooked = True

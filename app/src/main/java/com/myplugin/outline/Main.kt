@@ -1,164 +1,81 @@
 package com.myplugin.outline
 
-import android.content.res.Resources
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
-import android.util.TypedValue
-import java.lang.reflect.Field
 
-class Main {
-    companion object {
-        @JvmStatic
-        private var paint: Paint? = null
+object Main {
 
-        @JvmStatic
-        private val fieldCache = HashMap<String, Field?>()
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val rect = RectF()
+    private var lastColor: Int = 0
+    private var lastAlpha: Int = -1
+    private var lastWidth: Float = -1f
+    private var lastRadius: Float = -1f
 
-        @JvmStatic
-        fun start() {
-        }
+    @JvmStatic
+    fun start() {
+    }
 
-        @JvmStatic
-        fun version(): String = "1.0.0"
+    @JvmStatic
+    fun version(): Int = 1
 
-        @JvmStatic
-        fun drawOutline(
-            cell: Any,
-            canvas: Canvas,
-            colorHex: String,
-            widthDp: Float?,
-            opacityPct: Int?,
-            forceEverywhere: Boolean?
-        ) {
-            try {
-                if (forceEverywhere != true && readBoolean(cell, "drawOutbounds") == false) {
-                    return
-                }
-                val rect = bubbleRect(cell) ?: return
-                val stroke = cachedPaint()
-                stroke.color = withOpacity(parseColor(colorHex), (opacityPct ?: 100).coerceIn(0, 100))
-                stroke.strokeWidth = dp(widthDp ?: 1.5f)
-                val radius = dp(18f)
-                canvas.drawRoundRect(rect, radius, radius, stroke)
-            } catch (_: Throwable) {
+    @JvmStatic
+    fun drawOutline(cell: Any, canvas: Canvas, colorHex: String, widthDp: Float, opacityPct: Int, forceEverywhere: Boolean) {
+        try {
+            val left = getInt(cell, "getBackgroundDrawableLeft")
+            val top = getInt(cell, "getBackgroundDrawableTop")
+            val right = getInt(cell, "getBackgroundDrawableRight")
+            val bottom = getInt(cell, "getBackgroundDrawableBottom")
+            val w = right - left
+            val h = bottom - top
+            if (w <= 0 || h <= 0) {
+                return
             }
-        }
-
-        @JvmStatic
-        fun getThemeColor(key: String): Int {
-            return try {
-                val themeClass = Class.forName("org.telegram.ui.ActionBar.Theme")
-                val method = themeClass.getDeclaredMethod("getColor", String::class.java)
-                method.invoke(null, key) as Int
-            } catch (_: Throwable) {
-                0
+            val color = parseColor(colorHex)
+            val alpha = (opacityPct.coerceIn(0, 100) * 255 / 100).coerceIn(0, 255)
+            val density = android.content.res.Resources.getSystem().displayMetrics.density
+            val width = widthDp.coerceAtLeast(0.5f) * density
+            val radius = bubbleRadius() * density
+            if (color != lastColor || alpha != lastAlpha || width != lastWidth || radius != lastRadius) {
+                paint.style = Paint.Style.STROKE
+                paint.color = (color and 0x00FFFFFF) or (alpha shl 24)
+                paint.strokeWidth = width
+                lastColor = color
+                lastAlpha = alpha
+                lastWidth = width
+                lastRadius = radius
             }
+            rect.set(left + width / 2f, top + width / 2f, right - width / 2f, bottom - width / 2f)
+            canvas.drawRoundRect(rect, radius, radius, paint)
+        } catch (_: Throwable) {
         }
+    }
 
-        @JvmStatic
-        fun parseColor(hex: String): Int {
-            var value = hex.trim()
-            if (value.startsWith("#")) {
-                value = value.substring(1)
+    private fun getInt(cell: Any, methodName: String): Int {
+        return cell.javaClass.getMethod(methodName).invoke(cell) as Int
+    }
+
+    private fun bubbleRadius(): Float {
+        try {
+            val radius = Class.forName("org.telegram.messenger.SharedConfig").getField("bubbleRadius").getInt(null)
+            return radius.coerceIn(0, 60).toFloat()
+        } catch (_: Throwable) {
+            return 18f
+        }
+    }
+
+    private fun parseColor(hex: String): Int {
+        try {
+            val cleaned = hex.trim().removePrefix("#")
+            if (cleaned.length == 6) {
+                return cleaned.toInt(16) or 0xff000000.toInt()
             }
-            return when (value.length) {
-                6 -> 0xFF000000.toInt() or (java.lang.Long.decode("0x$value").toInt())
-                8 -> java.lang.Long.decode("0x$value").toInt()
-                else -> 0xFF000000.toInt()
+            if (cleaned.length == 8) {
+                return cleaned.toInt(16)
             }
+        } catch (_: Throwable) {
         }
-
-        @JvmStatic
-        fun dp(value: Float): Float {
-            return TypedValue.applyDimension(
-                TypedValue.COMPLEX_UNIT_DIP,
-                value,
-                Resources.getSystem().displayMetrics
-            )
-        }
-
-        @JvmStatic
-        fun versionCode(): Int = 1
-
-        private fun cachedPaint(): Paint {
-            paint?.let { return it }
-            val stroke = Paint(Paint.ANTI_ALIAS_FLAG)
-            stroke.style = Paint.Style.STROKE
-            paint = stroke
-            return stroke
-        }
-
-        private fun withOpacity(color: Int, opacity: Int): Int {
-            val alpha = ((color ushr 24) and 0xFF) * opacity / 100
-            val r = (color ushr 16) and 0xFF
-            val g = (color ushr 8) and 0xFF
-            val b = color and 0xFF
-            return (alpha shl 24) or (r shl 16) or (g shl 8) or b
-        }
-
-        private fun bubbleRect(cell: Any): RectF? {
-            val width = readNumber(cell, "backgroundWidth") ?: return null
-            val height = readNumber(cell, "backgroundHeight") ?: return null
-            if (width <= 0f || height <= 0f) return null
-            val x = firstNumber(cell, "layoutX", "backgroundDrawX") ?: 0f
-            val y = firstNumber(cell, "layoutY", "backgroundDrawY") ?: 0f
-            return RectF(x, y, x + width, y + height)
-        }
-
-        private fun firstNumber(cell: Any, vararg names: String): Float? {
-            for (name in names) {
-                val value = readNumber(cell, name)
-                if (value != null) {
-                    return value
-                }
-            }
-            return null
-        }
-
-        private fun readNumber(cell: Any, name: String): Float? {
-            val field = fieldFor(cell, name) ?: return null
-            return try {
-                when (val value = field.get(cell)) {
-                    is Float -> value
-                    is Double -> value.toFloat()
-                    is Number -> value.toFloat()
-                    else -> null
-                }
-            } catch (_: Throwable) {
-                null
-            }
-        }
-
-        private fun readBoolean(cell: Any, name: String): Boolean? {
-            val field = fieldFor(cell, name) ?: return null
-            return try {
-                when (val value = field.get(cell)) {
-                    is Boolean -> value
-                    is Int -> value != 0
-                    else -> null
-                }
-            } catch (_: Throwable) {
-                null
-            }
-        }
-
-        private fun fieldFor(cell: Any, name: String): Field? {
-            val key = cell.javaClass.name + "#" + name
-            fieldCache[key]?.let { return it }
-            var cls: Class<*>? = cell.javaClass
-            while (cls != null) {
-                try {
-                    val field = cls.getDeclaredField(name)
-                    field.isAccessible = true
-                    fieldCache[key] = field
-                    return field
-                } catch (_: Throwable) {
-                }
-                cls = cls.superclass
-            }
-            fieldCache[key] = null
-            return null
-        }
+        return 0xff000000.toInt()
     }
 }
